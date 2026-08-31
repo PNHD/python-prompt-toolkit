@@ -1,4 +1,4 @@
-name: Validate Vi Ctrl-Y fix
+name: Validate Vi Ctrl-Y matrix
 
 on:
   push:
@@ -6,96 +6,45 @@ on:
       - ops/vi-ctrl-y-worker
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch-and-validate:
-    runs-on: ubuntu-24.04
+  test-target:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
+
     steps:
-      - name: Check out target branch
+      - name: Check out verified target
         uses: actions/checkout@v6.0.2
         with:
-          ref: fix/vi-insert-ctrl-y
-          fetch-depth: 0
-
-      - name: Verify target head
-        shell: bash
-        run: |
-          test "$(git rev-parse HEAD)" = "242b868b5f1b71c0d32642a79df9ef99243ee92b"
-
-      - name: Apply Vi Ctrl-Y fix
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("src/prompt_toolkit/key_binding/bindings/vi.py")
-          text = path.read_text(encoding="utf-8")
-          old = (
-              '    @handle("c-g", filter=vi_insert_mode)\n'
-              '    @handle("c-y", filter=vi_insert_mode)\n'
-              '    def _accept_completion(event: E) -> None:\n'
-              '        """\n'
-              '        Accept current completion.\n'
-              '        """\n'
-              '        event.current_buffer.complete_state = None\n'
-          )
-          new = (
-              '    @handle("c-g", filter=vi_insert_mode)\n'
-              '    def _accept_completion(event: E) -> None:\n'
-              '        """\n'
-              '        Accept current completion.\n'
-              '        """\n'
-              '        event.current_buffer.complete_state = None\n'
-              '\n'
-              '    @handle("c-y", filter=vi_insert_mode)\n'
-              '    def _accept_completion_or_yank(event: E) -> None:\n'
-              '        """\n'
-              '        Accept current completion, or yank when no completion is active.\n'
-              '        """\n'
-              '        if event.current_buffer.complete_state is None:\n'
-              '            get_by_name("yank").handler(event)\n'
-              '        else:\n'
-              '            event.current_buffer.complete_state = None\n'
-          )
-          if text.count(old) != 1:
-              raise SystemExit("Could not locate Vi completion handler")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
-          git diff --check
+          ref: f169827167bc83336af8e3033adf233c8d8043c3
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.14"
+          python-version: ${{ matrix.python-version }}
 
-      - name: Run focused regression tests
-        shell: bash
-        run: uv run pytest -q tests/test_vi_insert_bindings.py
-
-      - name: Run formatting and typo checks
-        shell: bash
+      - name: Code formatting
+        if: ${{ matrix.python-version == '3.14' }}
         run: |
           uv run ruff check .
           uv run ruff format --check .
-          uv run typos .
 
-      - name: Run full test suite
-        shell: bash
+      - name: Typos
+        if: ${{ matrix.python-version == '3.14' }}
+        run: uv run typos .
+
+      - name: Focused Vi Ctrl-Y tests
+        run: uv run pytest -q tests/test_vi_insert_bindings.py
+
+      - name: Unit test
         run: uv run coverage run -m pytest tests/
 
-      - name: Run strict type checks
-        shell: bash
+      - name: Type Checking
         run: |
           uv run mypy --strict src/ --platform win32
           uv run mypy --strict src/ --platform linux
           uv run mypy --strict src/ --platform darwin
-
-      - name: Commit verified fix
-        shell: bash
-        run: |
-          git config user.name "Dang Pham"
-          git config user.email "26757735+PNHD@users.noreply.github.com"
-          git add src/prompt_toolkit/key_binding/bindings/vi.py
-          git commit -m "fix: restore Ctrl-Y yank in Vi insert mode"
-          git push origin HEAD:fix/vi-insert-ctrl-y
