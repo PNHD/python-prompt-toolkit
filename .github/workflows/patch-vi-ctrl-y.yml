@@ -31,31 +31,33 @@ jobs:
 
           path = Path("src/prompt_toolkit/key_binding/bindings/vi.py")
           text = path.read_text(encoding="utf-8")
-          old = '''    @handle("c-g", filter=vi_insert_mode)
-    @handle("c-y", filter=vi_insert_mode)
-    def _accept_completion(event: E) -> None:
-        """
-        Accept current completion.
-        """
-        event.current_buffer.complete_state = None
-'''
-          new = '''    @handle("c-g", filter=vi_insert_mode)
-    def _accept_completion(event: E) -> None:
-        """
-        Accept current completion.
-        """
-        event.current_buffer.complete_state = None
-
-    @handle("c-y", filter=vi_insert_mode)
-    def _accept_completion_or_yank(event: E) -> None:
-        """
-        Accept current completion, or yank when no completion is active.
-        """
-        if event.current_buffer.complete_state is None:
-            get_by_name("yank").handler(event)
-        else:
-            event.current_buffer.complete_state = None
-'''
+          old = (
+              '    @handle("c-g", filter=vi_insert_mode)\n'
+              '    @handle("c-y", filter=vi_insert_mode)\n'
+              '    def _accept_completion(event: E) -> None:\n'
+              '        """\n'
+              '        Accept current completion.\n'
+              '        """\n'
+              '        event.current_buffer.complete_state = None\n'
+          )
+          new = (
+              '    @handle("c-g", filter=vi_insert_mode)\n'
+              '    def _accept_completion(event: E) -> None:\n'
+              '        """\n'
+              '        Accept current completion.\n'
+              '        """\n'
+              '        event.current_buffer.complete_state = None\n'
+              '\n'
+              '    @handle("c-y", filter=vi_insert_mode)\n'
+              '    def _accept_completion_or_yank(event: E) -> None:\n'
+              '        """\n'
+              '        Accept current completion, or yank when no completion is active.\n'
+              '        """\n'
+              '        if event.current_buffer.complete_state is None:\n'
+              '            get_by_name("yank").handler(event)\n'
+              '        else:\n'
+              '            event.current_buffer.complete_state = None\n'
+          )
           if text.count(old) != 1:
               raise SystemExit("Could not locate Vi completion handler")
           path.write_text(text.replace(old, new, 1), encoding="utf-8")
